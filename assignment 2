@@ -75,6 +75,18 @@ RENAME COLUMN action TO user_action;
 ALTER TABLE edu_platform.assessment_results
 ADD CONSTRAINT chk_score_limit CHECK (score <= 100);
 
+TRUNCATE TABLE 
+edu_platform.certifications,
+edu_platform.assessment_results,
+edu_platform.activity_logs,
+edu_platform.enrollments,
+edu_platform.assessments,
+edu_platform.modules,
+edu_platform.courses,
+edu_platform.users
+RESTART IDENTITY CASCADE;
+a
+
 
 -- INSERT DATAS
 
