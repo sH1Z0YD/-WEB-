@@ -1,1 +1,123 @@
+CREATE SCHEMA IF NOT EXISTS edu_platform;
 
+CREATE TABLE IF NOT EXISTS edu_platform.users (
+    user_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    email VARCHAR(50) UNIQUE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS edu_platform.courses (
+    course_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    title VARCHAR(100) NOT NULL,
+    description TEXT,
+    instructor_id INT REFERENCES edu_platform.users(user_id) ON DELETE SET NULL,
+    price_usd NUMERIC(10,2) NOT NULL CHECK (price_usd >= 0),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS edu_platform.modules (
+    module_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    course_id INT REFERENCES edu_platform.courses(course_id) ON DELETE CASCADE,
+    title VARCHAR(100) NOT NULL,
+    sequence_order INT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS edu_platform.assessments (
+    assessment_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    module_id INT REFERENCES edu_platform.modules(module_id) ON DELETE CASCADE,
+    title VARCHAR(100) NOT NULL,
+    max_score NUMERIC(5,2) NOT NULL CHECK (max_score > 0)
+);
+
+CREATE TABLE IF NOT EXISTS edu_platform.enrollments (
+    enrollment_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id INT REFERENCES edu_platform.users(user_id) ON DELETE CASCADE,
+    course_id INT REFERENCES edu_platform.courses(course_id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL CHECK (status IN ('active','completed','dropped')),
+    progress_percent NUMERIC(5,2) DEFAULT 0.00 CHECK (progress_percent >= 0 AND progress_percent <= 100)
+);
+
+CREATE TABLE IF NOT EXISTS edu_platform.activity_logs (
+    log_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id INT REFERENCES edu_platform.users(user_id) ON DELETE CASCADE,
+    action VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS edu_platform.assessment_results (
+    result_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    assessment_id INT REFERENCES edu_platform.assessments(assessment_id) ON DELETE CASCADE,
+    user_id INT REFERENCES edu_platform.users(user_id) ON DELETE CASCADE,
+    score NUMERIC(5,2) NOT NULL CHECK (score >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS edu_platform.certifications (
+    certification_id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id INT REFERENCES edu_platform.users(user_id) ON DELETE CASCADE,
+    course_id INT REFERENCES edu_platform.courses(course_id) ON DELETE CASCADE,
+    issue_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    certificate_url VARCHAR(255) UNIQUE NOT NULL
+);
+
+ALTER TABLE edu_platform.users
+ADD CONSTRAINT chk_email_format CHECK (email LIKE '%@%');
+
+ALTER TABLE edu_platform.modules
+ADD CONSTRAINT unique_module_order UNIQUE (course_id, sequence_order);
+
+ALTER TABLE edu_platform.enrollments
+ALTER COLUMN status SET DEFAULT 'active';
+
+ALTER TABLE edu_platform.activity_logs
+RENAME COLUMN action TO user_action;
+
+ALTER TABLE edu_platform.assessment_results
+ADD CONSTRAINT chk_score_limit CHECK (score <= 100);
+
+
+-- INSERT DATAS
+
+INSERT INTO edu_platform.users (first_name,last_name,email) VALUES
+('Ali','Khan','ali@gmail.com'),
+('Sara','Smith','sara@gmail.com'),
+('John','Brown','john@gmail.com');
+
+INSERT INTO edu_platform.courses (title,description,instructor_id,price_usd)
+VALUES
+('SQL Basics','Learn SQL',(SELECT user_id FROM edu_platform.users WHERE email='ali@gmail.com'),100),
+('Web Dev','HTML CSS JS',(SELECT user_id FROM edu_platform.users WHERE email='sara@gmail.com'),150),
+('Python','Programming',(SELECT user_id FROM edu_platform.users WHERE email='john@gmail.com'),120);
+
+INSERT INTO edu_platform.modules (course_id,title,sequence_order)
+VALUES
+((SELECT course_id FROM edu_platform.courses WHERE title='SQL Basics'),'Intro',1),
+((SELECT course_id FROM edu_platform.courses WHERE title='Web Dev'),'HTML',1),
+((SELECT course_id FROM edu_platform.courses WHERE title='Python'),'Basics',1);
+
+INSERT INTO edu_platform.assessments (module_id,title,max_score)
+VALUES
+((SELECT module_id FROM edu_platform.modules WHERE title='Intro'),'Quiz',100),
+((SELECT module_id FROM edu_platform.modules WHERE title='HTML'),'Test',100),
+((SELECT module_id FROM edu_platform.modules WHERE title='Basics'),'Exam',100);
+
+INSERT INTO edu_platform.enrollments (user_id,course_id,status)
+VALUES
+((SELECT user_id FROM edu_platform.users WHERE email='ali@gmail.com'),
+ (SELECT course_id FROM edu_platform.courses WHERE title='SQL Basics'),'active'),
+((SELECT user_id FROM edu_platform.users WHERE email='sara@gmail.com'),
+ (SELECT course_id FROM edu_platform.courses WHERE title='Web Dev'),'completed'),
+((SELECT user_id FROM edu_platform.users WHERE email='john@gmail.com'),
+ (SELECT course_id FROM edu_platform.courses WHERE title='Python'),'active');
+
+INSERT INTO edu_platform.assessment_results (assessment_id,user_id,score)
+VALUES
+(1,1,90),
+(2,2,85),
+(3,3,95);
+
+INSERT INTO edu_platform.certifications (user_id,course_id,certificate_url)
+VALUES
+(1,1,'cert1.com'),
+(2,2,'cert2.com'),
+(3,3,'cert3.com');
