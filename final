@@ -1,0 +1,504 @@
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_database
+        WHERE datname = 'university_db'
+    ) THEN
+        EXECUTE 'CREATE DATABASE university_db';
+    END IF;
+END $$;
+
+CREATE SCHEMA IF NOT EXISTS university;
+
+CREATE TABLE IF NOT EXISTS university.students (
+    student_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    full_name VARCHAR(150)
+    GENERATED ALWAYS AS (
+        first_name || ' ' || last_name
+    ) STORED,
+    email VARCHAR(120) NOT NULL UNIQUE,
+    gender VARCHAR(10) NOT NULL,
+    birth_date DATE,
+    enrollment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    gpa NUMERIC(3,2)
+);
+
+CREATE TABLE IF NOT EXISTS university.departments (
+    department_id SERIAL PRIMARY KEY,
+    department_name VARCHAR(100) NOT NULL UNIQUE,
+    building VARCHAR(100) NOT NULL,
+    total_courses INT DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS university.professors (
+    professor_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    full_name VARCHAR(150)
+    GENERATED ALWAYS AS (
+        first_name || ' ' || last_name
+    ) STORED,
+    email VARCHAR(120) NOT NULL UNIQUE,
+    hire_date DATE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS university.courses (
+    course_id SERIAL PRIMARY KEY,
+    department_id INT NOT NULL
+    REFERENCES university.departments(department_id)
+    ON DELETE CASCADE,
+    professor_id INT
+    REFERENCES university.professors(professor_id)
+    ON DELETE SET NULL,
+    course_name VARCHAR(120) NOT NULL UNIQUE,
+    credits INT NOT NULL,
+    course_fee NUMERIC(10,2) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS university.classrooms (
+    classroom_id SERIAL PRIMARY KEY,
+    building VARCHAR(100) NOT NULL,
+    room_number VARCHAR(20) NOT NULL UNIQUE,
+    capacity INT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS university.schedules (
+    schedule_id SERIAL PRIMARY KEY,
+    course_id INT NOT NULL
+    REFERENCES university.courses(course_id)
+    ON DELETE CASCADE,
+    classroom_id INT NOT NULL
+    REFERENCES university.classrooms(classroom_id)
+    ON DELETE RESTRICT,
+    lesson_day VARCHAR(20) NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS university.enrollments (
+    enrollment_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL
+    REFERENCES university.students(student_id)
+    ON DELETE CASCADE,
+    course_id INT NOT NULL
+    REFERENCES university.courses(course_id)
+    ON DELETE CASCADE,
+    enrolled_at DATE NOT NULL,
+    status VARCHAR(20) DEFAULT 'active'
+);
+
+CREATE TABLE IF NOT EXISTS university.student_clubs (
+    club_id SERIAL PRIMARY KEY,
+    club_name VARCHAR(100) NOT NULL UNIQUE,
+    created_at DATE DEFAULT CURRENT_DATE
+);
+
+CREATE TABLE IF NOT EXISTS university.student_club_members (
+    membership_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL
+    REFERENCES university.students(student_id)
+    ON DELETE CASCADE,
+    club_id INT NOT NULL
+    REFERENCES university.student_clubs(club_id)
+    ON DELETE CASCADE,
+    joined_at DATE DEFAULT CURRENT_DATE
+);
+
+ALTER TABLE university.students
+ADD COLUMN IF NOT EXISTS phone_number VARCHAR(15);
+
+ALTER TABLE university.students
+ALTER COLUMN phone_number TYPE VARCHAR(20);
+
+ALTER TABLE university.schedules
+RENAME COLUMN lesson_day TO weekday;
+
+ALTER TABLE university.courses
+ALTER COLUMN course_fee SET DEFAULT 0;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'unique_room_number'
+    ) THEN
+        ALTER TABLE university.classrooms
+        ADD CONSTRAINT unique_room_number UNIQUE(room_number);
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'check_gender'
+    ) THEN
+        ALTER TABLE university.students
+        DROP CONSTRAINT check_gender;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'check_gpa'
+    ) THEN
+        ALTER TABLE university.students
+        DROP CONSTRAINT check_gpa;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'check_course_fee'
+    ) THEN
+        ALTER TABLE university.courses
+        DROP CONSTRAINT check_course_fee;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'check_enrollment_date'
+    ) THEN
+        ALTER TABLE university.enrollments
+        DROP CONSTRAINT check_enrollment_date;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'check_enrollment_status'
+    ) THEN
+        ALTER TABLE university.enrollments
+        DROP CONSTRAINT check_enrollment_status;
+    END IF;
+
+END $$;
+
+ALTER TABLE university.students
+ADD CONSTRAINT check_gender
+CHECK (gender IN ('M', 'F', 'Other'));
+
+ALTER TABLE university.students
+ADD CONSTRAINT check_gpa
+CHECK (gpa >= 0);
+
+ALTER TABLE university.courses
+ADD CONSTRAINT check_course_fee
+CHECK (course_fee >= 0);
+
+ALTER TABLE university.enrollments
+ADD CONSTRAINT check_enrollment_date
+CHECK (enrolled_at > DATE '2026-01-01');
+
+ALTER TABLE university.enrollments
+ADD CONSTRAINT check_enrollment_status
+CHECK (status IN ('active', 'completed', 'dropped'));
+
+TRUNCATE TABLE
+university.student_club_members,
+university.student_clubs,
+university.enrollments,
+university.schedules,
+university.classrooms,
+university.courses,
+university.professors,
+university.departments,
+university.students
+RESTART IDENTITY CASCADE;
+
+INSERT INTO university.students (
+    first_name,
+    last_name,
+    email,
+    gender,
+    birth_date,
+    gpa,
+    phone_number
+)
+VALUES
+('Karim', 'Naregeev', 'karim@uni.kz', 'M', '2005-03-12', 3.85, '+77071234567'),
+('Alice', 'Johnson', 'alice@uni.kz', 'F', '2004-07-18', 3.45, '+77081234567'),
+('Michael', 'Lee', 'michael@uni.kz', 'M', '2003-11-01', 2.95, '+77091234567');
+
+INSERT INTO university.departments (
+    department_name,
+    building
+)
+VALUES
+('Computer Science', 'Block A'),
+('Business', 'Block B'),
+('Engineering', 'Block C');
+
+INSERT INTO university.professors (
+    first_name,
+    last_name,
+    email,
+    hire_date
+)
+VALUES
+('John', 'Smith', 'john.smith@uni.kz', '2026-02-01'),
+('Emma', 'Brown', 'emma.brown@uni.kz', '2026-03-12'),
+('David', 'Wilson', 'david.wilson@uni.kz', '2026-04-15');
+
+INSERT INTO university.courses (
+    department_id,
+    professor_id,
+    course_name,
+    credits,
+    course_fee
+)
+VALUES
+(
+    (
+        SELECT department_id
+        FROM university.departments
+        WHERE department_name = 'Computer Science'
+    ),
+    (
+        SELECT professor_id
+        FROM university.professors
+        WHERE email = 'john.smith@uni.kz'
+    ),
+    'Database Systems',
+    5,
+    150000
+),
+(
+    (
+        SELECT department_id
+        FROM university.departments
+        WHERE department_name = 'Computer Science'
+    ),
+    (
+        SELECT professor_id
+        FROM university.professors
+        WHERE email = 'emma.brown@uni.kz'
+    ),
+    'Web Development',
+    4,
+    120000
+),
+(
+    (
+        SELECT department_id
+        FROM university.departments
+        WHERE department_name = 'Business'
+    ),
+    (
+        SELECT professor_id
+        FROM university.professors
+        WHERE email = 'david.wilson@uni.kz'
+    ),
+    'Marketing Fundamentals',
+    3,
+    100000
+);
+
+INSERT INTO university.classrooms (
+    building,
+    room_number,
+    capacity
+)
+VALUES
+('Block A', 'A101', 40),
+('Block B', 'B202', 35),
+('Block C', 'C303', 50);
+
+INSERT INTO university.schedules (
+    course_id,
+    classroom_id,
+    weekday,
+    start_time,
+    end_time
+)
+VALUES
+(
+    (
+        SELECT course_id
+        FROM university.courses
+        WHERE course_name = 'Database Systems'
+    ),
+    (
+        SELECT classroom_id
+        FROM university.classrooms
+        WHERE room_number = 'A101'
+    ),
+    'Monday',
+    '09:00',
+    '10:30'
+),
+(
+    (
+        SELECT course_id
+        FROM university.courses
+        WHERE course_name = 'Web Development'
+    ),
+    (
+        SELECT classroom_id
+        FROM university.classrooms
+        WHERE room_number = 'B202'
+    ),
+    'Wednesday',
+    '11:00',
+    '12:30'
+),
+(
+    (
+        SELECT course_id
+        FROM university.courses
+        WHERE course_name = 'Marketing Fundamentals'
+    ),
+    (
+        SELECT classroom_id
+        FROM university.classrooms
+        WHERE room_number = 'C303'
+    ),
+    'Friday',
+    '14:00',
+    '15:30'
+);
+
+INSERT INTO university.enrollments (
+    student_id,
+    course_id,
+    enrolled_at,
+    status
+)
+VALUES
+(
+    (
+        SELECT student_id
+        FROM university.students
+        WHERE email = 'karim@uni.kz'
+    ),
+    (
+        SELECT course_id
+        FROM university.courses
+        WHERE course_name = 'Database Systems'
+    ),
+    '2026-02-10',
+    'active'
+),
+(
+    (
+        SELECT student_id
+        FROM university.students
+        WHERE email = 'alice@uni.kz'
+    ),
+    (
+        SELECT course_id
+        FROM university.courses
+        WHERE course_name = 'Web Development'
+    ),
+    '2026-03-01',
+    'active'
+),
+(
+    (
+        SELECT student_id
+        FROM university.students
+        WHERE email = 'michael@uni.kz'
+    ),
+    (
+        SELECT course_id
+        FROM university.courses
+        WHERE course_name = 'Marketing Fundamentals'
+    ),
+    '2026-04-01',
+    'completed'
+);
+
+INSERT INTO university.student_clubs (
+    club_name
+)
+VALUES
+('Programming Club'),
+('Chess Club'),
+('Robotics Club');
+
+INSERT INTO university.student_club_members (
+    student_id,
+    club_id
+)
+SELECT
+    s.student_id,
+    c.club_id
+FROM university.students s
+JOIN university.student_clubs c
+ON c.club_name IN ('Programming Club', 'Chess Club')
+WHERE s.email = 'karim@uni.kz';
+
+UPDATE university.enrollments
+SET status = 'completed'
+WHERE student_id IN (
+    SELECT student_id
+    FROM university.students
+    WHERE gpa > 3.7
+);
+
+UPDATE university.departments d
+SET total_courses = sub.course_count
+FROM (
+    SELECT
+        department_id,
+        COUNT(*) AS course_count
+    FROM university.courses
+    GROUP BY department_id
+) sub
+WHERE d.department_id = sub.department_id;
+
+BEGIN;
+
+DELETE FROM university.enrollments
+WHERE status = 'dropped'
+RETURNING enrollment_id, student_id, course_id;
+
+ROLLBACK;
+
+DO $$
+BEGIN
+
+    IF EXISTS (
+        SELECT FROM pg_roles
+        WHERE rolname = 'university_readonly'
+    ) THEN
+        REASSIGN OWNED BY university_readonly TO CURRENT_USER;
+        DROP OWNED BY university_readonly;
+        DROP ROLE university_readonly;
+    END IF;
+
+    IF EXISTS (
+        SELECT FROM pg_roles
+        WHERE rolname = 'university_editor'
+    ) THEN
+        REASSIGN OWNED BY university_editor TO CURRENT_USER;
+        DROP OWNED BY university_editor;
+        DROP ROLE university_editor;
+    END IF;
+
+END $$;
+
+CREATE ROLE university_readonly;
+
+CREATE ROLE university_editor;
+
+GRANT USAGE ON SCHEMA university
+TO university_readonly, university_editor;
+
+GRANT SELECT
+ON ALL TABLES IN SCHEMA university
+TO university_readonly;
+
+GRANT INSERT, UPDATE
+ON university.enrollments
+TO university_editor;
+
+REVOKE UPDATE
+ON university.enrollments
+FROM university_editor;
